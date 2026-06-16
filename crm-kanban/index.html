@@ -295,7 +295,7 @@ function load() {
     }
   } catch(e) {}
   stages = JSON.parse(JSON.stringify(DEFAULT_STAGES));
-  deals = SAMPLE;
+  deals = JSON.parse(JSON.stringify(SAMPLE));
 }
 function save() { localStorage.setItem("crm-kanban", JSON.stringify({ stages, deals })); }
 

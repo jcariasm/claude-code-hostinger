@@ -10,3 +10,4 @@ CRM pipedrive/
 # Node
 node_modules/
 .vercel/
+.vercel

@@ -1,0 +1,8 @@
+crm-kanban/_ref/
+crm-kanban/pipedrive.jpg
+CRM pipedrive/
+.sync.log
+.bisync_baseline_done
+node_modules/
+sync.sh
+*.md
