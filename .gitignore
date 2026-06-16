@@ -1,0 +1,12 @@
+# Referencias internas, no parte de la app
+crm-kanban/_ref/
+crm-kanban/pipedrive.jpg
+CRM pipedrive/
+
+# Artefactos de sincronización rclone
+.sync.log
+.bisync_baseline_done
+
+# Node
+node_modules/
+.vercel/

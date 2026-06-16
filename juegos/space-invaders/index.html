@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Space Invaders</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: #000;
+    color: #0f0;
+    font-family: "Courier New", monospace;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+  }
+  #game {
+    background: #000;
+    border: 2px solid #0f0;
+    box-shadow: 0 0 20px #0f0;
+    image-rendering: pixelated;
+    touch-action: none;
+  }
+  #hud {
+    width: 600px;
+    max-width: 100%;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 18px;
+    letter-spacing: 2px;
+  }
+  #hint {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #060;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <div id="hud">
+    <span>PUNTOS: <span id="score">0</span></span>
+    <span>NIVEL: <span id="level">1</span></span>
+    <span>VIDAS: <span id="lives">3</span></span>
+  </div>
+  <canvas id="game" width="600" height="600"></canvas>
+  <div id="hint">← → o A/D para mover &nbsp;·&nbsp; ESPACIO para disparar &nbsp;·&nbsp; P para pausar</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const W = canvas.width, H = canvas.height;
+
+const scoreEl = document.getElementById("score");
+const levelEl = document.getElementById("level");
+const livesEl = document.getElementById("lives");
+
+// ---- Estado del juego ----
+let state, keys = {};
+
+function newPlayer() {
+  return { x: W / 2 - 20, y: H - 50, w: 40, h: 18, speed: 5, cooldown: 0 };
+}
+
+function createInvaders(level) {
+  const rows = 5, cols = 11;
+  const inv = [];
+  const offX = 60, offY = 60, gapX = 42, gapY = 36;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      inv.push({
+        x: offX + c * gapX,
+        y: offY + r * gapY,
+        w: 28, h: 20,
+        alive: true,
+        type: r === 0 ? 2 : (r < 3 ? 1 : 0)
+      });
+    }
+  }
+  return inv;
+}
+
+function resetGame() {
+  state = {
+    player: newPlayer(),
+    bullets: [],      // disparos del jugador
+    bombs: [],        // disparos de invasores
+    invaders: createInvaders(1),
+    dir: 1,
+    invSpeed: 0.6,
+    invDrop: 14,
+    score: 0,
+    level: 1,
+    lives: 3,
+    over: false,
+    win: false,
+    paused: false,
+    stepTimer: 0,
+    fireTimer: 0
+  };
+  updateHUD();
+}
+
+function nextLevel() {
+  state.level++;
+  state.invaders = createInvaders(state.level);
+  state.dir = 1;
+  state.invSpeed = 0.6 + state.level * 0.25;
+  state.bullets = [];
+  state.bombs = [];
+  state.player = newPlayer();
+  updateHUD();
+}
+
+function updateHUD() {
+  scoreEl.textContent = state.score;
+  levelEl.textContent = state.level;
+  livesEl.textContent = state.lives;
+}
+
+// ---- Input ----
+document.addEventListener("keydown", e => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.key === " ") e.preventDefault();
+  if (e.key.toLowerCase() === "p") togglePause();
+  if ((state.over || state.win) && e.key === "Enter") resetGame();
+});
+document.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+
+// Controles táctiles básicos
+let touchX = null;
+canvas.addEventListener("touchstart", handleTouch, {passive:false});
+canvas.addEventListener("touchmove", handleTouch, {passive:false});
+canvas.addEventListener("touchend", () => { touchX = null; fire(); });
+function handleTouch(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  touchX = (e.touches[0].clientX - rect.left) * (W / rect.width);
+}
+
+function togglePause() {
+  if (state.over || state.win) return;
+  state.paused = !state.paused;
+}
+
+function fire() {
+  if (state.player.cooldown <= 0 && !state.paused && !state.over && !state.win) {
+    state.bullets.push({ x: state.player.x + state.player.w / 2 - 2, y: state.player.y, w: 4, h: 12, speed: 8 });
+    state.player.cooldown = 18;
+  }
+}
+
+// ---- Lógica ----
+function update() {
+  if (state.paused || state.over || state.win) return;
+  const p = state.player;
+
+  // Movimiento jugador
+  if (keys["arrowleft"] || keys["a"]) p.x -= p.speed;
+  if (keys["arrowright"] || keys["d"]) p.x += p.speed;
+  if (touchX !== null) {
+    if (touchX < p.x + p.w / 2 - 4) p.x -= p.speed;
+    else if (touchX > p.x + p.w / 2 + 4) p.x += p.speed;
+  }
+  p.x = Math.max(0, Math.min(W - p.w, p.x));
+  if (keys[" "]) fire();
+  if (p.cooldown > 0) p.cooldown--;
+
+  // Disparos jugador
+  state.bullets.forEach(b => b.y -= b.speed);
+  state.bullets = state.bullets.filter(b => b.y + b.h > 0);
+
+  // Movimiento de invasores (en bloque, rebote)
+  const alive = state.invaders.filter(i => i.alive);
+  if (alive.length === 0) { state.win = true; }
+
+  let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
+  alive.forEach(i => {
+    minX = Math.min(minX, i.x);
+    maxX = Math.max(maxX, i.x + i.w);
+    maxY = Math.max(maxY, i.y + i.h);
+  });
+
+  let drop = false;
+  if (state.dir > 0 && maxX + state.invSpeed >= W) drop = true;
+  if (state.dir < 0 && minX - state.invSpeed <= 0) drop = true;
+
+  if (drop) {
+    state.dir *= -1;
+    alive.forEach(i => i.y += state.invDrop);
+    state.invSpeed += 0.05;
+  } else {
+    alive.forEach(i => i.x += state.dir * state.invSpeed);
+  }
+
+  // Invasores llegan abajo => game over
+  if (maxY >= p.y) { state.over = true; }
+
+  // Invasores disparan
+  state.fireTimer--;
+  if (state.fireTimer <= 0 && alive.length) {
+    const shooter = alive[Math.floor(Math.random() * alive.length)];
+    state.bombs.push({ x: shooter.x + shooter.w / 2 - 2, y: shooter.y + shooter.h, w: 4, h: 12, speed: 3 + state.level * 0.3 });
+    state.fireTimer = Math.max(20, 90 - state.level * 8);
+  }
+  state.bombs.forEach(b => b.y += b.speed);
+  state.bombs = state.bombs.filter(b => b.y < H);
+
+  // Colisiones: balas vs invasores
+  state.bullets.forEach(b => {
+    state.invaders.forEach(i => {
+      if (i.alive && hit(b, i)) {
+        i.alive = false;
+        b.dead = true;
+        state.score += (i.type + 1) * 10;
+      }
+    });
+  });
+  state.bullets = state.bullets.filter(b => !b.dead);
+
+  // Colisiones: bombas vs jugador
+  state.bombs.forEach(b => {
+    if (hit(b, p)) {
+      b.dead = true;
+      state.lives--;
+      if (state.lives <= 0) state.over = true;
+    }
+  });
+  state.bombs = state.bombs.filter(b => !b.dead);
+
+  if (state.win) { nextLevel(); state.win = false; }
+  updateHUD();
+}
+
+function hit(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// ---- Render ----
+function drawInvader(i) {
+  const colors = ["#0f0", "#0ff", "#ff0"];
+  ctx.fillStyle = colors[i.type];
+  // Cuerpo
+  ctx.fillRect(i.x + 4, i.y, i.w - 8, i.h - 6);
+  ctx.fillRect(i.x, i.y + 4, i.w, i.h - 12);
+  // Patas
+  ctx.fillRect(i.x, i.y + i.h - 6, 6, 6);
+  ctx.fillRect(i.x + i.w - 6, i.y + i.h - 6, 6, 6);
+  // Ojos
+  ctx.fillStyle = "#000";
+  ctx.fillRect(i.x + 7, i.y + 6, 4, 4);
+  ctx.fillRect(i.x + i.w - 11, i.y + 6, 4, 4);
+}
+
+function drawPlayer(p) {
+  ctx.fillStyle = "#0f0";
+  ctx.fillRect(p.x, p.y + 8, p.w, p.h - 8);
+  ctx.fillRect(p.x + p.w / 2 - 4, p.y, 8, 10);
+}
+
+function render() {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, W, H);
+
+  // Estrellas de fondo
+  ctx.fillStyle = "#030";
+  for (let i = 0; i < 40; i++) {
+    const x = (i * 137) % W;
+    const y = (i * 89) % H;
+    ctx.fillRect(x, y, 2, 2);
+  }
+
+  state.invaders.forEach(i => { if (i.alive) drawInvader(i); });
+  drawPlayer(state.player);
+
+  ctx.fillStyle = "#fff";
+  state.bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+  ctx.fillStyle = "#f44";
+  state.bombs.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+
+  if (state.paused) banner("PAUSA", "Pulsa P para continuar");
+  if (state.over) banner("GAME OVER", "Pulsa ENTER para reiniciar");
+}
+
+function banner(title, sub) {
+  ctx.fillStyle = "rgba(0,0,0,0.7)";
+  ctx.fillRect(0, H / 2 - 60, W, 120);
+  ctx.fillStyle = "#0f0";
+  ctx.textAlign = "center";
+  ctx.font = "48px Courier New";
+  ctx.fillText(title, W / 2, H / 2);
+  ctx.font = "18px Courier New";
+  ctx.fillText(sub, W / 2, H / 2 + 36);
+  ctx.textAlign = "left";
+}
+
+// ---- Bucle ----
+function loop() {
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+
+resetGame();
+loop();
+</script>
+</body>
+</html>

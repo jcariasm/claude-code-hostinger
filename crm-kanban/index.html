@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRM Kanban — Pipeline de Negocios</title>
+<style>
+  :root {
+    --green: #28a745;
+    --green-d: #1e7e34;
+    --bg: #f4f6f8;
+    --col-bg: #eef1f4;
+    --card: #ffffff;
+    --line: #e2e6ea;
+    --text: #2c3e50;
+    --muted: #8a95a1;
+    --blue: #2a8ad4;
+    --shadow: 0 1px 3px rgba(0,0,0,.12);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+
+  /* ---------- Topbar ---------- */
+  header {
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+    padding: 10px 18px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky; top: 0; z-index: 50;
+  }
+  header h1 { font-size: 20px; font-weight: 600; }
+  .btn {
+    border: none; border-radius: 4px; cursor: pointer;
+    padding: 8px 14px; font-size: 14px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-green { background: var(--green); color: #fff; }
+  .btn-green:hover { background: var(--green-d); }
+  .btn-light { background: #f0f2f4; color: var(--text); }
+  .btn-light:hover { background: #e4e7ea; }
+  .search {
+    flex: 1; max-width: 340px;
+    border: 1px solid var(--line); border-radius: 4px;
+    padding: 8px 12px; font-size: 14px; outline: none;
+  }
+  .search:focus { border-color: var(--blue); }
+  .summary { margin-left: auto; text-align: right; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .summary b { color: var(--text); font-size: 15px; }
+  .summary .weighted { color: var(--green-d); font-weight: 600; }
+
+  /* ---------- Board ---------- */
+  .board {
+    display: flex; gap: 12px; padding: 16px;
+    overflow-x: auto; align-items: flex-start;
+    height: calc(100vh - 58px);
+  }
+  .column {
+    background: var(--col-bg);
+    border-radius: 8px;
+    min-width: 270px; width: 270px;
+    display: flex; flex-direction: column;
+    max-height: 100%;
+  }
+  .col-head {
+    padding: 10px 12px; border-bottom: 2px solid transparent;
+    position: relative;
+  }
+  .col-head .name { font-weight: 600; display:flex; align-items:center; gap:6px; }
+  .col-head .stage-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .col-head .prob-badge { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
+  .col-head .edit-stage {
+    margin-left: auto; border: none; background: none; cursor: pointer;
+    color: var(--muted); font-size: 13px; opacity: 0; transition: opacity .15s;
+  }
+  .column:hover .edit-stage { opacity: 1; }
+  .col-head .edit-stage:hover { color: var(--blue); }
+  .col-head .stats { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .col-head .wstat b { color: var(--green-d); }
+  .col-head .bar { height: 3px; border-radius: 3px; margin-top: 8px; background: #d7dde2; overflow: hidden; }
+  .col-head .bar > i { display:block; height:100%; background: var(--green); width: 100%; }
+  .cards {
+    padding: 8px; overflow-y: auto; flex: 1;
+    display: flex; flex-direction: column; gap: 8px;
+    min-height: 60px;
+  }
+  .cards.drag-over { background: #e3ecf3; border-radius: 6px; outline: 2px dashed var(--blue); }
+
+  /* ---------- Card ---------- */
+  .card {
+    background: var(--card); border-radius: 6px; padding: 10px;
+    box-shadow: var(--shadow); cursor: grab; border-left: 3px solid transparent;
+    position: relative;
+  }
+  .card:active { cursor: grabbing; }
+  .card.dragging { opacity: .5; }
+  .card .title { font-weight: 600; margin-bottom: 2px; padding-right: 16px; }
+  .card .org { color: var(--muted); font-size: 12.5px; margin-bottom: 6px; }
+  .card .value { color: var(--green-d); font-weight: 700; font-size: 13.5px; }
+  .card .meta { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .card .tags { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+  .tag { width: 22px; height: 5px; border-radius: 3px; }
+  .avatar {
+    width: 24px; height: 24px; border-radius: 50%; color: #fff;
+    font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    flex: none;
+  }
+  .rot { color: #e0a800; font-size: 14px; }              /* alerta deal sin actividad */
+  .card .del {
+    position: absolute; top: 6px; right: 6px; cursor: pointer;
+    color: var(--muted); font-size: 14px; line-height: 1; opacity: 0;
+    transition: opacity .15s; border:none; background:none;
+  }
+  .card:hover .del { opacity: 1; }
+  .card .del:hover { color: #dc3545; }
+
+  .add-deal {
+    margin: 0 8px 8px; padding: 7px; border: 1px dashed #c4ccd3;
+    border-radius: 6px; color: var(--muted); cursor: pointer; text-align: center;
+    background: transparent; font-size: 13px;
+  }
+  .add-deal:hover { background: #e7ebef; color: var(--text); }
+
+  .add-col {
+    min-width: 220px; padding-top: 10px;
+  }
+  .add-col .btn { width: 100%; justify-content: center; }
+
+  /* ---------- Modal ---------- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.4);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 8px; width: 420px; max-width: 92vw;
+    padding: 22px; box-shadow: 0 10px 40px rgba(0,0,0,.25);
+  }
+  .modal h2 { font-size: 18px; margin-bottom: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+  .field input, .field select {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--line);
+    border-radius: 4px; font-size: 14px; outline: none;
+  }
+  .field input:focus, .field select:focus { border-color: var(--blue); }
+  .tag-picker { display: flex; gap: 8px; }
+  .tag-opt { width: 28px; height: 18px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; }
+  .tag-opt.sel { border-color: #2c3e50; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+  .row2 { display: flex; gap: 10px; }
+  .row2 > * { flex: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Deals</h1>
+  <button class="btn btn-green" id="newDealBtn">+ Negocio</button>
+  <input class="search" id="search" placeholder="Buscar negocios…">
+  <button class="btn btn-light" id="resetBtn" title="Restaurar datos de ejemplo">↺ Reset</button>
+  <div class="summary">
+    <b id="sumValue">$0</b>
+    <span id="sumCount">0 negocios</span><br>
+    <span id="sumWeighted" class="weighted">Forecast ponderado: $0</span>
+  </div>
+</header>
+
+<div class="board" id="board"></div>
+
+<!-- Modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modalTitle">Nuevo negocio</h2>
+    <div class="field">
+      <label>Título del negocio</label>
+      <input id="f-title" placeholder="Ej. Apple deal">
+    </div>
+    <div class="field">
+      <label>Organización / contacto</label>
+      <input id="f-org" placeholder="Ej. Apple Inc.">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Valor ($)</label>
+        <input id="f-value" type="number" min="0" step="100" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Etapa</label>
+        <select id="f-stage"></select>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Responsable (iniciales)</label>
+        <input id="f-owner" maxlength="2" placeholder="JC">
+      </div>
+      <div class="field">
+        <label>Etiqueta</label>
+        <div class="tag-picker" id="tagPicker"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="f-rotten" style="width:auto"> Marcar como sin actividad ⚠️</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-light" id="cancelBtn">Cancelar</button>
+      <button class="btn btn-green" id="saveBtn">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de etapa -->
+<div class="overlay" id="stageOverlay">
+  <div class="modal">
+    <h2 id="stageModalTitle">Editar etapa</h2>
+    <div class="field">
+      <label>Nombre de la etapa</label>
+      <input id="s-name" placeholder="Ej. Negociación">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Probabilidad de cierre (%)</label>
+        <input id="s-prob" type="number" min="0" max="100" step="5" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Color</label>
+        <input id="s-color" type="color" value="#3498db" style="height:38px;padding:2px">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-light" id="stageDeleteBtn" style="margin-right:auto;color:#dc3545">Eliminar etapa</button>
+      <button class="btn btn-light" id="stageCancelBtn">Cancelar</button>
+      <button class="btn btn-green" id="stageSaveBtn">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- Datos ----------
+const TAGS = ["#27ae60","#2980b9","#e67e22","#9b59b6","#e74c3c","#16a085"];
+const AV_COLORS = ["#2a8ad4","#27ae60","#e67e22","#9b59b6","#c0392b","#16a085","#34495e"];
+
+const DEFAULT_STAGES = [
+  { id: "s1", name: "Primer email enviado", color: "#3498db", prob: 10 },
+  { id: "s2", name: "Contacto hecho",       color: "#9b59b6", prob: 25 },
+  { id: "s3", name: "Necesidades definidas",color: "#e67e22", prob: 40 },
+  { id: "s4", name: "Propuesta enviada",    color: "#f1c40f", prob: 60 },
+  { id: "s5", name: "Negociación",          color: "#16a085", prob: 80 },
+  { id: "s6", name: "Ganado",               color: "#27ae60", prob: 100 },
+];
+
+const SAMPLE = [
+  d("Apple deal","Apple Inc.",120000,"s1","AP",0,false),
+  d("2K Games deal","2K Games",45000,"s1","TG",1,true),
+  d("ABC deal","ABC Corp",8500,"s1","AB",2,false),
+  d("AC deal","Acme",15000,"s1","AC",3,false),
+  d("AA 11 deal","AA Holdings",62000,"s2","AA",4,false),
+  d("Birdwatching","Nature Co",3200,"s2","NC",5,false),
+  d("Alexander's 2nd","Alexander Ltd",27000,"s2","AL",1,true),
+  d("Best deal","Best Group",98000,"s3","BG",2,false),
+  d("Cyberton","Cyberton",54000,"s3","CY",0,false),
+  d("Brandon Hurst","Hurst & Co",18000,"s4","BH",3,false),
+  d("Anna Hurst","Hurst & Co",75000,"s4","AH",4,true),
+  d("Big Win Ltd","Big Win",210000,"s5","BW",5,false),
+  d("Corporate XL","Corporate XL",330000,"s6","CX",1,false),
+];
+
+function d(title, org, value, stage, owner, tag, rotten) {
+  return { id: uid(), title, org, value, stage, owner, tag, rotten };
+}
+function uid() { return "d" + Math.floor(performance.now()*1000).toString(36) + Math.floor(performance.now()%97); }
+
+// ---------- Estado ----------
+let stages, deals;
+function load() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("crm-kanban"));
+    if (raw && raw.deals && raw.stages) {
+      stages = raw.stages; deals = raw.deals;
+      // Migración v1 -> v2: rellenar probabilidad si falta
+      const defMap = Object.fromEntries(DEFAULT_STAGES.map(s => [s.id, s.prob]));
+      const n = stages.length;
+      stages.forEach((s, i) => {
+        if (s.prob === undefined || s.prob === null)
+          s.prob = defMap[s.id] ?? Math.round((i+1) / n * 100);  // gradiente si no se reconoce
+      });
+      return;
+    }
+  } catch(e) {}
+  stages = JSON.parse(JSON.stringify(DEFAULT_STAGES));
+  deals = SAMPLE;
+}
+function save() { localStorage.setItem("crm-kanban", JSON.stringify({ stages, deals })); }
+
+// ---------- Render ----------
+const board = document.getElementById("board");
+const money = n => "$" + (n||0).toLocaleString("en-US");
+
+function render() {
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  board.innerHTML = "";
+  let gVal = 0, gCount = 0;
+
+  let gWeighted = 0;
+  stages.forEach(st => {
+    const prob = st.prob ?? 0;
+    const list = deals.filter(d => d.stage === st.id &&
+      (!q || d.title.toLowerCase().includes(q) || (d.org||"").toLowerCase().includes(q)));
+    const total = list.reduce((s,d) => s + (+d.value||0), 0);
+    const weighted = total * prob / 100;
+    gVal += total; gCount += list.length; gWeighted += weighted;
+
+    const col = document.createElement("div");
+    col.className = "column";
+    col.innerHTML = `
+      <div class="col-head">
+        <div class="name">
+          <span class="stage-dot" style="background:${st.color}"></span>${esc(st.name)}
+          <span class="prob-badge" style="background:${st.color}22;color:${st.color}">${prob}%</span>
+          <button class="edit-stage" title="Editar etapa">✎</button>
+        </div>
+        <div class="stats">${list.length} negocios · <b>${money(total)}</b></div>
+        <div class="stats wstat">Ponderado: <b>${money(Math.round(weighted))}</b></div>
+        <div class="bar"><i style="background:${st.color};width:${prob}%"></i></div>
+      </div>
+      <div class="cards" data-stage="${st.id}"></div>
+      <button class="add-deal" data-stage="${st.id}">+ Añadir negocio</button>
+    `;
+    col.querySelector(".edit-stage").addEventListener("click", () => openStageModal(st));
+    const cardsEl = col.querySelector(".cards");
+
+    list.forEach(dl => cardsEl.appendChild(cardEl(dl)));
+
+    // Drag & drop targets
+    cardsEl.addEventListener("dragover", e => { e.preventDefault(); cardsEl.classList.add("drag-over"); });
+    cardsEl.addEventListener("dragleave", () => cardsEl.classList.remove("drag-over"));
+    cardsEl.addEventListener("drop", e => {
+      e.preventDefault(); cardsEl.classList.remove("drag-over");
+      const id = e.dataTransfer.getData("text/plain");
+      const dl = deals.find(x => x.id === id);
+      if (dl) { dl.stage = st.id; save(); render(); }
+    });
+
+    col.querySelector(".add-deal").addEventListener("click", () => openModal(null, st.id));
+    board.appendChild(col);
+  });
+
+  // Botón añadir columna
+  const addCol = document.createElement("div");
+  addCol.className = "add-col";
+  addCol.innerHTML = `<button class="btn btn-light">+ Añadir etapa</button>`;
+  addCol.querySelector("button").addEventListener("click", addStage);
+  board.appendChild(addCol);
+
+  document.getElementById("sumValue").textContent = money(gVal);
+  document.getElementById("sumCount").textContent = gCount + " negocios";
+  document.getElementById("sumWeighted").textContent = "Forecast ponderado: " + money(Math.round(gWeighted));
+  save();
+}
+
+function cardEl(dl) {
+  const el = document.createElement("div");
+  el.className = "card";
+  el.draggable = true;
+  el.style.borderLeftColor = TAGS[dl.tag] || "transparent";
+  el.innerHTML = `
+    <button class="del" title="Eliminar">✕</button>
+    <div class="title">${esc(dl.title)}</div>
+    <div class="org">${esc(dl.org||"")}</div>
+    <div class="value">${money(dl.value)}</div>
+    <div class="meta">
+      <div class="tags"><span class="tag" style="background:${TAGS[dl.tag]||'#ccc'}"></span></div>
+      ${dl.rotten ? '<span class="rot" title="Sin actividad">⚠️</span>' : ''}
+      <span class="avatar" style="background:${AV_COLORS[(dl.owner||'').charCodeAt(0)%AV_COLORS.length]||'#888'}">${esc(dl.owner||'?')}</span>
+    </div>
+  `;
+  el.addEventListener("dragstart", e => { e.dataTransfer.setData("text/plain", dl.id); el.classList.add("dragging"); });
+  el.addEventListener("dragend", () => el.classList.remove("dragging"));
+  el.addEventListener("dblclick", () => openModal(dl));
+  el.querySelector(".del").addEventListener("click", e => {
+    e.stopPropagation();
+    if (confirm("¿Eliminar este negocio?")) { deals = deals.filter(x => x.id !== dl.id); render(); }
+  });
+  return el;
+}
+
+function esc(s){ return (s+"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+// ---------- Modal ----------
+const overlay = document.getElementById("overlay");
+let editing = null, selTag = 0;
+
+function buildTagPicker() {
+  const p = document.getElementById("tagPicker"); p.innerHTML = "";
+  TAGS.forEach((c,i) => {
+    const o = document.createElement("div");
+    o.className = "tag-opt" + (i===selTag?" sel":"");
+    o.style.background = c;
+    o.addEventListener("click", () => { selTag = i; buildTagPicker(); });
+    p.appendChild(o);
+  });
+}
+function fillStages() {
+  const sel = document.getElementById("f-stage"); sel.innerHTML = "";
+  stages.forEach(s => { const o = document.createElement("option"); o.value=s.id; o.textContent=s.name; sel.appendChild(o); });
+}
+function openModal(dl, stageId) {
+  editing = dl; selTag = dl ? dl.tag : 0;
+  document.getElementById("modalTitle").textContent = dl ? "Editar negocio" : "Nuevo negocio";
+  fillStages(); buildTagPicker();
+  document.getElementById("f-title").value = dl?.title || "";
+  document.getElementById("f-org").value = dl?.org || "";
+  document.getElementById("f-value").value = dl?.value ?? "";
+  document.getElementById("f-stage").value = dl?.stage || stageId || stages[0].id;
+  document.getElementById("f-owner").value = dl?.owner || "";
+  document.getElementById("f-rotten").checked = !!dl?.rotten;
+  overlay.classList.add("open");
+  document.getElementById("f-title").focus();
+}
+function closeModal() { overlay.classList.remove("open"); editing = null; }
+
+document.getElementById("saveBtn").addEventListener("click", () => {
+  const title = document.getElementById("f-title").value.trim();
+  if (!title) { alert("El título es obligatorio"); return; }
+  const data = {
+    title,
+    org: document.getElementById("f-org").value.trim(),
+    value: +document.getElementById("f-value").value || 0,
+    stage: document.getElementById("f-stage").value,
+    owner: document.getElementById("f-owner").value.trim().toUpperCase() || "?",
+    tag: selTag,
+    rotten: document.getElementById("f-rotten").checked
+  };
+  if (editing) Object.assign(editing, data);
+  else deals.push({ id: uid(), ...data });
+  closeModal(); render();
+});
+document.getElementById("cancelBtn").addEventListener("click", closeModal);
+overlay.addEventListener("click", e => { if (e.target === overlay) closeModal(); });
+
+// ---------- Etapas ----------
+const stageOverlay = document.getElementById("stageOverlay");
+let editingStage = null;
+
+function openStageModal(st) {
+  editingStage = st;
+  document.getElementById("s-name").value = st.name;
+  document.getElementById("s-prob").value = st.prob ?? 0;
+  document.getElementById("s-color").value = st.color || "#3498db";
+  // No permitir borrar si es la única etapa
+  document.getElementById("stageDeleteBtn").style.display = stages.length > 1 ? "" : "none";
+  stageOverlay.classList.add("open");
+  document.getElementById("s-name").focus();
+}
+function closeStageModal() { stageOverlay.classList.remove("open"); editingStage = null; }
+
+document.getElementById("stageSaveBtn").addEventListener("click", () => {
+  const name = document.getElementById("s-name").value.trim();
+  if (!name) { alert("El nombre es obligatorio"); return; }
+  let prob = Math.round(+document.getElementById("s-prob").value || 0);
+  prob = Math.max(0, Math.min(100, prob));
+  editingStage.name = name;
+  editingStage.prob = prob;
+  editingStage.color = document.getElementById("s-color").value;
+  closeStageModal(); render();
+});
+document.getElementById("stageDeleteBtn").addEventListener("click", () => {
+  const count = deals.filter(d => d.stage === editingStage.id).length;
+  const msg = count
+    ? `Esta etapa tiene ${count} negocio(s). Al borrarla se moverán a la primera etapa. ¿Continuar?`
+    : "¿Eliminar esta etapa?";
+  if (!confirm(msg)) return;
+  const target = stages.find(s => s.id !== editingStage.id);
+  deals.forEach(d => { if (d.stage === editingStage.id) d.stage = target.id; });
+  stages = stages.filter(s => s.id !== editingStage.id);
+  closeStageModal(); render();
+});
+document.getElementById("stageCancelBtn").addEventListener("click", closeStageModal);
+stageOverlay.addEventListener("click", e => { if (e.target === stageOverlay) closeStageModal(); });
+
+function addStage() {
+  const colors = ["#3498db","#9b59b6","#e67e22","#f1c40f","#16a085","#27ae60","#e74c3c","#34495e"];
+  const st = { id: "s"+uid(), name: "Nueva etapa", color: colors[stages.length % colors.length], prob: 50 };
+  stages.push(st);
+  render();
+  openStageModal(st);
+}
+
+// ---------- Init ----------
+document.getElementById("newDealBtn").addEventListener("click", () => openModal(null));
+document.getElementById("search").addEventListener("input", render);
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (confirm("¿Restaurar los datos de ejemplo? Se perderán tus cambios.")) {
+    localStorage.removeItem("crm-kanban"); load(); render();
+  }
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); closeStageModal(); } });
+
+load();
+render();
+</script>
+</body>
+</html>
