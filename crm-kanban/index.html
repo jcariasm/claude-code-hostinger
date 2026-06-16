@@ -256,21 +256,7 @@ const DEFAULT_STAGES = [
   { id: "s6", name: "Ganado",               color: "#27ae60", prob: 100 },
 ];
 
-const SAMPLE = [
-  d("Apple deal","Apple Inc.",120000,"s1","AP",0,false),
-  d("2K Games deal","2K Games",45000,"s1","TG",1,true),
-  d("ABC deal","ABC Corp",8500,"s1","AB",2,false),
-  d("AC deal","Acme",15000,"s1","AC",3,false),
-  d("AA 11 deal","AA Holdings",62000,"s2","AA",4,false),
-  d("Birdwatching","Nature Co",3200,"s2","NC",5,false),
-  d("Alexander's 2nd","Alexander Ltd",27000,"s2","AL",1,true),
-  d("Best deal","Best Group",98000,"s3","BG",2,false),
-  d("Cyberton","Cyberton",54000,"s3","CY",0,false),
-  d("Brandon Hurst","Hurst & Co",18000,"s4","BH",3,false),
-  d("Anna Hurst","Hurst & Co",75000,"s4","AH",4,true),
-  d("Big Win Ltd","Big Win",210000,"s5","BW",5,false),
-  d("Corporate XL","Corporate XL",330000,"s6","CX",1,false),
-];
+const SAMPLE = [];   // sin datos de ejemplo; el pipeline arranca vacío
 
 function d(title, org, value, stage, owner, tag, rotten) {
   return { id: uid(), title, org, value, stage, owner, tag, rotten };
